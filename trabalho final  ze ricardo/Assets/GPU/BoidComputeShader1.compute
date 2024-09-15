@@ -1,0 +1,69 @@
+#pragma kernel CSMain
+
+struct Boid
+{
+    float3 position;
+    float3 velocity;
+};
+
+RWStructuredBuffer<Boid> boids;
+int boidCount;
+float deltaTime;
+float maxSpeed;
+float neighborRadius;
+float separationWeight;
+float alignmentWeight;
+float cohesionWeight;
+float separationDistance;
+float alignmentDistance;
+float cohesionDistance;
+
+[numthreads(256, 1, 1)]
+void CSMain (uint3 id : SV_DispatchThreadID)
+{
+    if (id.x >= boidCount) return;
+
+    Boid boid = boids[id.x];
+    float3 separation = float3(0, 0, 0);
+    float3 alignment = float3(0, 0, 0);
+    float3 cohesion = float3(0, 0, 0);
+    int neighborCount = 0;
+
+    for (int i = 0; i < boidCount; i++)
+    {
+        if (i == id.x) continue;
+        Boid other = boids[i];
+        float distance = length(boid.position - other.position);
+        if (distance < neighborRadius)
+        {
+            if (distance < separationDistance)
+            {
+                separation += normalize(boid.position - other.position) / distance;
+            }
+            if (distance < alignmentDistance)
+            {
+                alignment += other.velocity;
+            }
+            if (distance < cohesionDistance)
+            {
+                cohesion += other.position;
+            }
+            neighborCount++;
+        }
+    }
+
+    if (neighborCount > 0)
+    {
+        separation /= neighborCount;
+        alignment /= neighborCount;
+        cohesion /= neighborCount;
+        cohesion = normalize(cohesion - boid.position);
+    }
+
+    float3 acceleration = separation * separationWeight + alignment * alignmentWeight + cohesion * cohesionWeight;
+    boid.velocity += acceleration * deltaTime;
+    boid.velocity = normalize(boid.velocity) * min(length(boid.velocity), maxSpeed);
+    boid.position += boid.velocity * deltaTime;
+
+    boids[id.x] = boid;
+}
